@@ -1,6 +1,14 @@
 """
 Parser - Analisador Sintático Descendente Preditivo Recursivo
 Responsável pela verificação da estrutura gramatical
+
+Correções:
+- Refatorada a gramática de expressões para resolver o conflito FIRST/FIRST
+  em 'termoRelacional' e 'fator' sobre o token 'LPAREN'.
+- 'fator' agora é responsável por todas as expressões parentizadas,
+  chamando 'expressaoRelacional'.
+- 'termoRelacional' foi simplificado para 'expressaoAritmetica (OP_REL expressaoAritmetica)?',
+  removendo a produção conflitante 'LPAREN expressaoRelacional RPAREN'.
 """
 
 from .token_types import Token, TokenType
@@ -24,10 +32,18 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
-        self.current_token = tokens[0] if tokens else None
+        # Adiciona um token de fim de arquivo para evitar falhas de índice
+        if not tokens or tokens[-1].tipo != TokenType.EOF:
+             # Assume que o último token dá a linha/coluna final se existir
+             last_line = tokens[-1].linha if tokens else 1
+             last_col = tokens[-1].coluna if tokens else 1
+             self.tokens.append(Token(TokenType.EOF, "EOF", last_line, last_col + 1))
+        
+        self.current_token = self.tokens[0]
 
     def advance(self):
         """Consome o token atual e avança para o próximo"""
+        # Não avança além do EOF
         if self.pos < len(self.tokens) - 1:
             self.pos += 1
             self.current_token = self.tokens[self.pos]
@@ -37,10 +53,10 @@ class Parser:
         pos = self.pos + offset
         if pos < len(self.tokens):
             return self.tokens[pos]
-        return None
+        return self.tokens[-1] # Retorna EOF se estourar
 
     def expect(self, tipo_token):
-        """Verifica se token atual é do tipo esperado"""
+        """Verifica se token atual é do tipo esperado e avança"""
         if self.current_token.tipo != tipo_token:
             raise SyntaxError(
                 f"Esperado {tipo_token}, encontrado {self.current_token.tipo}",
@@ -63,6 +79,9 @@ class Parser:
     def parse(self):
         """Inicia a análise"""
         self.programa()
+        # Após o programa, devemos estar no token EOF
+        if not self.match(TokenType.EOF):
+             self.error(f"Tokens inesperados após o fim do programa. Encontrado: {self.current_token.tipo}")
 
     def programa(self):
         """programa : 'function' 'main' '(' ')' '{' corpo '}'"""
@@ -76,15 +95,16 @@ class Parser:
 
     def corpo(self):
         """corpo : declaracoes comandos"""
+        # Modificado para permitir 0 ou mais declarações
         self.declaracoes()
+        # Modificado para permitir 0 ou mais comandos
         self.comandos()
 
     def declaracoes(self):
-        """declaracoes : declaracao declaracoes | declaracao"""
-        self.declaracao()
-        # Verifica se há mais declarações
-        if self.match(TokenType.LET, TokenType.CONST):
-            self.declaracoes()
+        """declaracoes : declaracao declaracoes | ε"""
+        # Permite 0 ou mais declarações
+        while self.match(TokenType.LET, TokenType.CONST):
+            self.declaracao()
 
     def declaracao(self):
         """declaracao : ('let' | 'const') ID ':' tipo ';'"""
@@ -93,6 +113,7 @@ class Parser:
         elif self.match(TokenType.CONST):
             self.advance()
         else:
+            # Isso não deve acontecer se chamado por 'declaracoes'
             self.error("Esperado 'let' ou 'const'")
 
         self.expect(TokenType.ID)
@@ -110,12 +131,12 @@ class Parser:
             self.error("Tipo inválido: esperado 'number' ou 'float'")
 
     def comandos(self):
-        """comandos : comando comandos | comando"""
-        self.comando()
+        """comandos : comando comandos | ε"""
+        # Permite 0 ou mais comandos
         # First(comando) = {ID, READ, CONSOLE_LOG, IF, WHILE, LBRACE}
-        if self.match(TokenType.ID, TokenType.READ, TokenType.CONSOLE_LOG,
-                      TokenType.IF, TokenType.WHILE, TokenType.LBRACE):
-            self.comandos()
+        while self.match(TokenType.ID, TokenType.READ, TokenType.CONSOLE_LOG,
+                         TokenType.IF, TokenType.WHILE, TokenType.LBRACE):
+            self.comando()
 
     def comando(self):
         """comando : atribuicao | leitura | escrita | condicional | repeticao | blocoInterno"""
@@ -153,12 +174,18 @@ class Parser:
         """escrita : 'console.log' '(' (ID | STRING) ')' ';'"""
         self.expect(TokenType.CONSOLE_LOG)
         self.expect(TokenType.LPAREN)
-        if self.match(TokenType.ID):
+        if self.match(TokenType.ID, TokenType.STRING):
             self.advance()
-        elif self.match(TokenType.STRING):
-            self.advance()
+        # CORREÇÃO: A gramática original também deveria permitir
+        #           qualquer expressão aritmética.
+        #           Vamos manter ID | STRING por enquanto,
+        #           mas o ideal seria 'expressaoRelacional'.
+        # elif self.match(TokenType.ID, TokenType.STRING):
+        #     self.advance()
         else:
-            self.error("Esperado ID ou STRING em console.log")
+            # Vamos permitir qualquer expressão
+            self.expressaoRelacional() 
+            # self.error("Esperado ID ou STRING em console.log")
         self.expect(TokenType.RPAREN)
         self.expect(TokenType.SEMICOLON)
 
@@ -186,12 +213,11 @@ class Parser:
     def blocoInterno(self):
         """blocoInterno : '{' comandos '}'"""
         self.expect(TokenType.LBRACE)
-        self.comandos()
+        self.comandos() # 'comandos' agora permite 0 comandos
         self.expect(TokenType.RBRACE)
 
     def expressaoAritmetica(self):
-        """expressaoAritmetica : termo expressaoAritmetica'
-           Eliminação de recursão à esquerda"""
+        """expressaoAritmetica : termo expressaoAritmetica'"""
         self.termo()
         self.expressaoAritmetica_linha()
 
@@ -203,51 +229,53 @@ class Parser:
             self.expressaoAritmetica_linha()
 
     def termo(self):
-        """termo : fator termo'
-           Eliminação de recursão à esquerda"""
+        """termo : fator termo'"""
         self.fator()
         self.termo_linha()
 
     def termo_linha(self):
-        """termo' : ('*' | '/') fator termo' | ε"""
+        """termo' : ('*' | '/' | '%') fator termo' | ε"""
+        # Corrigido para incluir MOD (módulo)
         if self.match(TokenType.MULT, TokenType.DIV, TokenType.MOD):
             self.advance()
             self.fator()
             self.termo_linha()
 
     def fator(self):
-        """fator : NUMINT | NUMREAL | ID | '(' expressaoAritmetica ')'"""
+        """fator : NUMINT | NUMREAL | ID | '(' expressaoRelacional ')'"""
+        # CORREÇÃO: Alterado de 'expressaoAritmetica' para 'expressaoRelacional'
+        # para resolver o conflito gramatical.
         if self.match(TokenType.NUMINT, TokenType.NUMREAL, TokenType.ID):
             self.advance()
         elif self.match(TokenType.LPAREN):
             self.advance()
-            self.expressaoAritmetica()
+            self.expressaoRelacional() # Chamada recursiva para a expressão de maior precedência
             self.expect(TokenType.RPAREN)
         else:
-            self.error("Fator inválido")
+            self.error("Fator inválido: esperado Número, ID ou '('")
 
     def expressaoRelacional(self):
-        """expressaoRelacional : termoRelacional expressaoRelacional'
-           Eliminação de recursão à esquerda"""
+        """expressaoRelacional : termoRelacional expressaoRelacional'"""
+        # print("Entrando em expressaoRelacional") # Debug removido
         self.termoRelacional()
         self.expressaoRelacional_linha()
 
     def expressaoRelacional_linha(self):
         """expressaoRelacional' : operadorLogico termoRelacional expressaoRelacional' | ε"""
         if self.match(TokenType.AND, TokenType.OR):
-            self.advance()
+            self.advance() # operadorLogico consumido
             self.termoRelacional()
             self.expressaoRelacional_linha()
 
     def termoRelacional(self):
-        """termoRelacional : expressaoAritmetica OP_REL expressaoAritmetica
-                           | '(' expressaoRelacional ')'"""
-        if self.match(TokenType.LPAREN):
-            self.advance()
-            self.expressaoRelacional()
-            self.expect(TokenType.RPAREN)
-        else:
-            self.expressaoAritmetica()
+        """termoRelacional : expressaoAritmetica (operadorRelacional expressaoAritmetica)?"""
+        # CORREÇÃO: Gramática simplificada.
+        # A regra 'LPAREN expressaoRelacional RPAREN' foi movida para 'fator'.
+        self.expressaoAritmetica()
+        
+        # Verifica se há uma parte relacional (opcional)
+        if self.match(TokenType.LT, TokenType.GT, TokenType.LTE, 
+                      TokenType.GTE, TokenType.EQ, TokenType.NEQ):
             self.operadorRelacional()
             self.expressaoAritmetica()
 
