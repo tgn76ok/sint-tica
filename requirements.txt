@@ -1,0 +1,6 @@
+# Mini Compiler - Requirements
+# Este projeto não possui dependências externas
+# Python 3.7+ é suficiente
+
+# Para desenvolvimento e testes:
+# pytest>=6.0 (opcional, para rodar suite de testes)

@@ -1,0 +1,77 @@
+programa :
+    'function' 'main' '(' ')' '{' corpo '}';
+
+corpo :
+    declaracoes comandos;
+
+declaracoes :
+    declaracao declaracoes |
+    declaracao;
+
+declaracao :
+    ('let' | 'const') ID ':' tipo ';';
+
+tipo :
+    'number' |
+    'float';
+
+comandos :
+    comando comandos |
+    comando;
+
+comando :
+    atribuicao |
+    leitura |
+    escrita |
+    condicional |
+    repeticao |
+    blocoInterno;
+
+atribuicao :
+    ID '=' expressaoAritmetica ';';
+
+leitura :
+    'read' '(' ID ')' ';';
+
+escrita :
+    'console.log' '(' (ID | CADEIA) ')' ';';
+
+condicional :
+    'if' '(' expressaoRelacional ')' blocoInterno |
+    'if' '(' expressaoRelacional ')' blocoInterno 'else' blocoInterno;
+
+repeticao :
+    'while' '(' expressaoRelacional ')' blocoInterno;
+
+blocoInterno :
+    '{' comandos '}';
+
+expressaoAritmetica :
+    expressaoAritmetica '+' termo |
+    expressaoAritmetica '-' termo |
+    termo;
+
+termo :
+    termo '*' fator |
+    termo '/' fator |
+    fator;
+
+fator :
+    NUMINT |
+    NUMREAL |
+    ID |
+    '(' expressaoAritmetica ')';
+
+expressaoRelacional :
+    expressaoAritmetica OP_REL expressaoAritmetica |
+    '(' expressaoRelacional ')' |
+    expressaoRelacional operadorLogico termoRelacional;
+
+termoRelacional :
+    expressaoAritmetica OP_REL expressaoAritmetica |
+    '(' expressaoRelacional ')';
+
+operadorLogico :
+    '&&' |
+    '||';
+

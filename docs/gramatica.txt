@@ -1,0 +1,239 @@
+# Gramática - Mini Language
+
+## Definição BNF Completa
+
+```
+<programa>              ::= 'function' 'main' '(' ')' '{' <corpo> '}'
+
+<corpo>                 ::= <declaracoes> <comandos>
+
+<declaracoes>           ::= <declaracao> 
+                          | <declaracao> <declaracoes>
+
+<declaracao>            ::= ('let' | 'const') ID ':' <tipo> ';'
+
+<tipo>                  ::= 'number' 
+                          | 'float'
+
+<comandos>              ::= <comando> 
+                          | <comando> <comandos>
+
+<comando>               ::= <atribuicao>
+                          | <leitura>
+                          | <escrita>
+                          | <condicional>
+                          | <repeticao>
+                          | <blocoInterno>
+
+<atribuicao>            ::= ID '=' <expressaoAritmetica> ';'
+
+<leitura>               ::= 'read' '(' ID ')' ';'
+
+<escrita>               ::= 'console.log' '(' (ID | STRING) ')' ';'
+
+<condicional>           ::= 'if' '(' <expressaoRelacional> ')' <blocoInterno>
+                          | 'if' '(' <expressaoRelacional> ')' <blocoInterno> 'else' <blocoInterno>
+
+<repeticao>             ::= 'while' '(' <expressaoRelacional> ')' <blocoInterno>
+
+<blocoInterno>          ::= '{' <comandos> '}'
+
+<expressaoAritmetica>   ::= <expressaoAritmetica> '+' <termo>
+                          | <expressaoAritmetica> '-' <termo>
+                          | <termo>
+
+<termo>                 ::= <termo> '*' <fator>
+                          | <termo> '/' <fator>
+                          | <fator>
+
+<fator>                 ::= NUMINT 
+                          | NUMREAL 
+                          | ID 
+                          | '(' <expressaoAritmetica> ')'
+
+<expressaoRelacional>   ::= <expressaoAritmetica> OP_REL <expressaoAritmetica>
+                          | '(' <expressaoRelacional> ')'
+                          | <expressaoRelacional> OPERADOR_LOGICO <termoRelacional>
+
+<termoRelacional>       ::= <expressaoAritmetica> OP_REL <expressaoAritmetica>
+                          | '(' <expressaoRelacional> ')'
+
+OP_REL                  ::= '<' 
+                          | '>' 
+                          | '<=' 
+                          | '>=' 
+                          | '==' 
+                          | '!='
+
+OPERADOR_LOGICO         ::= '&&' 
+                          | '||'
+
+Terminais:
+  ID                    - Identificador (sequência de letras, dígitos, '_')
+  NUMINT                - Número inteiro
+  NUMREAL               - Número real com ponto decimal
+  STRING                - Cadeia de caracteres entre aspas
+```
+
+## Análise de Precedência e Associatividade
+
+### Precedência (do maior para menor)
+
+1. **Primário** (Fator)
+   - Números (NUMINT, NUMREAL)
+   - Identificadores (ID)
+   - Expressões entre parênteses `(...)`
+
+2. **Multiplicativo**
+   - `*` (Multiplicação) - Associativi Esquerda
+   - `/` (Divisão) - Associativi Esquerda
+
+3. **Aditivo**
+   - `+` (Adição) - Associativi Esquerda
+   - `-` (Subtração) - Associativi Esquerda
+
+4. **Relacional**
+   - `<`, `>`, `<=`, `>=`, `==`, `!=` - Não associativos
+
+5. **Lógico E (AND)**
+   - `&&` - Associativi Esquerda
+
+6. **Lógico OU (OR)**
+   - `||` - Associativi Esquerda
+
+### Exemplos de Precedência
+
+- `2 + 3 * 4` = `2 + (3 * 4)` = `14`
+- `2 * 3 + 4` = `(2 * 3) + 4` = `10`
+- `x > 5 && y < 10` = `(x > 5) && (y < 10)`
+
+## Conjuntos First e Follow
+
+### First Sets
+
+```
+First(programa) = {FUNCTION}
+First(corpo) = {LET, CONST}
+First(declaracoes) = {LET, CONST}
+First(declaracao) = {LET, CONST}
+First(tipo) = {NUMBER, FLOAT}
+First(comandos) = {ID, READ, CONSOLE_LOG, IF, WHILE, LBRACE}
+First(comando) = {ID, READ, CONSOLE_LOG, IF, WHILE, LBRACE}
+First(atribuicao) = {ID}
+First(leitura) = {READ}
+First(escrita) = {CONSOLE_LOG}
+First(condicional) = {IF}
+First(repeticao) = {WHILE}
+First(blocoInterno) = {LBRACE}
+First(expressaoAritmetica) = {NUMINT, NUMREAL, ID, LPAREN}
+First(termo) = {NUMINT, NUMREAL, ID, LPAREN}
+First(fator) = {NUMINT, NUMREAL, ID, LPAREN}
+First(expressaoRelacional) = {NUMINT, NUMREAL, ID, LPAREN, NOT}
+First(termoRelacional) = {NUMINT, NUMREAL, ID, LPAREN}
+First(operadorLogico) = {AND, OR}
+```
+
+### Follow Sets
+
+```
+Follow(corpo) = {RBRACE}
+Follow(declaracoes) = First(comandos) = {ID, READ, CONSOLE_LOG, IF, WHILE, LBRACE}
+Follow(declaracao) = First(declaracoes) ∪ First(comandos)
+Follow(tipo) = {SEMICOLON}
+Follow(comandos) = {RBRACE}
+Follow(comando) = First(comandos) ∪ {RBRACE}
+Follow(atribuicao) = Follow(comando)
+Follow(expressaoAritmetica) = {SEMICOLON, RPAREN, OP_REL, EOF}
+Follow(termo) = {PLUS, MINUS, SEMICOLON, RPAREN, OP_REL}
+Follow(fator) = {MULT, DIV, PLUS, MINUS, SEMICOLON, RPAREN, OP_REL}
+Follow(expressaoRelacional) = {RPAREN}
+Follow(termoRelacional) = {AND, OR, RPAREN}
+```
+
+## Propriedades Gramaticais
+
+### Recursividade
+
+Esta gramática contém recursão à esquerda em:
+- `expressaoAritmetica` (produção 1 e 2)
+- `termo` (produção 1 e 2)
+- `expressaoRelacional` (produção 3)
+
+**Transformação:** A recursão à esquerda foi eliminada durante a implementação do parser para permitir análise descendente preditiva sem retrocesso.
+
+### Gramática LL(1)
+
+A gramática foi projetada para ser **LL(1)** após transformações:
+- Sem recursão à esquerda
+- Sem ambiguidades
+- Decisões preditivas com lookahead de 1 token
+
+## Exemplos de Derivação
+
+### Exemplo 1: Expressão Aritmética
+
+**Código:** `y = 2 + 3 * 4;`
+
+**Árvore de Derivação:**
+```
+expressaoAritmetica
+├── termo
+│   └── fator
+│       └── NUMINT(2)
+└── expressaoAritmetica'
+    ├── PLUS
+    ├── termo
+    │   ├── fator
+    │   │   └── NUMINT(3)
+    │   └── termo'
+    │       ├── MULT
+    │       ├── fator
+    │       │   └── NUMINT(4)
+    │       └── termo'(ε)
+    └── expressaoAritmetica'(ε)
+```
+
+**Precedência aplicada:**
+- `2 + 3 * 4` = `2 + (3 * 4)` = `2 + 12` = `14`
+
+### Exemplo 2: Expressão Relacional
+
+**Código:** `if (x > 5 && y < 10) { ... }`
+
+**Derivação:**
+```
+condicional
+├── IF
+├── LPAREN
+├── expressaoRelacional
+│   ├── termoRelacional
+│   │   ├── expressaoAritmetica
+│   │   │   └── ID(x)
+│   │   ├── GT
+│   │   └── expressaoAritmetica
+│   │       └── NUMINT(5)
+│   └── expressaoRelacional'
+│       ├── AND
+│       ├── termoRelacional
+│       │   ├── expressaoAritmetica
+│       │   │   └── ID(y)
+│       │   ├── LT
+│       │   └── expressaoAritmetica
+│       │       └── NUMINT(10)
+│       └── expressaoRelacional'(ε)
+├── RPAREN
+└── blocoInterno
+```
+
+## Erros Gramaticais
+
+O parser detecta os seguintes tipos de erros:
+
+| Erro | Exemplo | Mensagem |
+|------|---------|----------|
+| Falta de ponto-e-vírgula | `let x: number` | Esperado `;` |
+| Tipo inválido | `let x: integer` | Tipo inválido |
+| Delimitador não balanceado | `if (x > 0` | Esperado `)` |
+| Token inesperado | `let : number;` | Esperado `ID` |
+| Operador inválido | `x = 5 +;` | Fator inválido |
+| Estrutura malformada | `if x > 0 {}` | Esperado `(` |
